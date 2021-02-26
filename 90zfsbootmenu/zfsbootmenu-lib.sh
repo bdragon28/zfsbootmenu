@@ -424,6 +424,7 @@ header_wrap() {
     if [ "${#tokens[@]}" -gt 0 ]; then
       # Only try to wrap if the width is long enough
       if [ "${wrap_width}" -gt 0 ]; then
+        [ "$(( field_width + 4 ))" -ge "${wrap_width}" ] && footer="${footer//_/ }"
         footer="$( echo -n -e "${tokens[@]}" | fold -s -w "${wrap_width}" )"
       else
         footer="$( echo -n -e "${tokens[@]}" )"
@@ -1461,11 +1462,13 @@ timed_prompt() {
   tput clear
 
   x=$(( (HEIGHT - 0) / 2))
+  [ "${x}" -lt 0 ] && x=0
 
   [ -n "${cnum}" ] && tput setaf "${cnum}"
   while [ $# -gt 0 ]; do
     local line=${1}
     y=$(( (WIDTH - ${#line}) / 2 ))
+    [ "${y}" -lt 0 ] && y=0
     tput cup $x $y
     echo -n -e "${line}"
     x=$(( x + 1 ))
@@ -1477,6 +1480,7 @@ timed_prompt() {
     # shellcheck disable=SC2059
     mes="$( printf "${prompt}" "${i}" )"
     y=$(( (WIDTH - ${#mes}) / 2 ))
+    [ "${y}" -lt 0 ] && y=0
     tput cup $x $y
     echo -ne "${mes}"
 
