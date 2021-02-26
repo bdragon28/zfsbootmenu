@@ -410,6 +410,8 @@ header_wrap() {
       shift
 
       if [ -n "${tok}" ]; then
+        # If breaks are disallowed, also suppress all-empty tokens
+        [ "${allow_breaks}" -eq 1 ] || [ -n "${tok//_/}" ] || continue;
         tokens+=( "${tok}" )
       elif [ "${allow_breaks}" -eq 1 ]; then
         # Hard wrap on empty tokens only with sufficient space
