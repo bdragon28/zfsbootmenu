@@ -354,60 +354,52 @@ csv_cat() {
 # returns: nothing
 
 header_wrap() {
-  local tokens tok footer
+  local hardbreak tokens tok footer nlines
 
-  ncols="$( tput cols 2>/dev/null )" || ncols=80
+  # Pick a wrap width if none was specified
+  [ -n "$wrap_width" ] || wrap_width="$(( $( tput cols ) - 4 ))"
 
+  nlines="$( tput lines 2>/dev/null )" || nlines=0
 
-  if [ "$ncols" -ge 120 ]; then
-    per_row=4
-  else
-    per_row=3
-  fi
-
+  # Processing is done line-by-line
   while [ $# -gt 0 ]; do
-    i=0
+    hardbreak=0
     tokens=()
 
+    # Process up to the first empty string, which is a hard break
     while [ $# -gt 0 ]; do
-      tok="${1// / }"
+      tok="${1// /_}"
       shift
 
-      zdebug "index=${i}, token=${tok}"
-
-      # enforce a hard break
-      if [ "${tok}" = "EOL" ]; then
-        break
-      fi
-
-      tok="$( printf "%-24s" "${tok}" )"
-      tokens+=( "${tok}" )
-
-      # increment counter on valid token
-      ((i=i+1))
-
-      if [ "$i" -eq "$per_row" ]; then
+      if [ -n "${tok}" ]; then
+        tokens+=( "${tok}" )
+      elif [ "$nlines" -ge 24 ]; then
+        # Hard wrap on empty tokens only with sufficient space
+        hardbreak=1
         break
       fi
     done
 
-    zdebug "i=$i, per_row=${per_row}"
-    if [ "${per_row}" -gt "${i}" ]; then
-      ws=$(( (per_row - i ) * 24 ))
+    # Print the header if there were tokens
+    if [ "${#tokens[@]}" -gt 0 ]; then
+      # Only try to wrap if the width is long enough
+      if [ "${wrap_width}" -gt 0 ]; then
+        footer="$( echo -n -e "${tokens[@]}" | fold -s -w "${wrap_width}" )"
+      else
+        footer="$( echo -n -e "${tokens[@]}" )"
+      fi
 
-      # off by one error somewhere...
-      ws=$(( ws+1 ))
-      tok="$( printf '%*s' $ws )"
-      tokens+=( "${tok}" )
+      # Add some color for emphasis
+      footer="${footer//\[/\\033\[0;32m\[}"
+      footer="${footer//\]/\]\\033\[0m}"
+
+      echo -n -e "${footer//_/ }"
     fi
 
-    footer="$( echo -n -e "${tokens[@]}" )"
-    footer="$( center_string "${footer}" )" 
-    footer="${footer//\[/\\033\[0;32m\[}"
-    footer="${footer//\]/\]\\033\[0m}"
-
-    zdebug "line: '${footer}'"
-    echo -e "${footer}"
+    # Add a hard break if an empty token was provided
+    if [ "${hardbreak}" -ne 0 ]; then
+      echo ""
+    fi
   done
 }
 
@@ -431,9 +423,9 @@ draw_be() {
 
   zdebug "using environment file: ${env}"
 
-  header="$( header_wrap "[ENTER] boot" "[ESC] refresh view" "[CTRL+H] help" "[CTRL+L] view logs" \
-    "[CTRL+E] edit kcl" "[CTRL+K] kernels" "[CTRL+D] set bootfs" "[CTRL+S] snapshots" \
-    "[CTRL+I] chroot" "[CTRL+R] recovery shell" "[CTRL+P] pool status" )"
+  header="$( header_wrap "[ENTER] boot" "[ESC] refresh view" "[CTRL+H] help" "[CTRL+L] view logs" "" \
+    "[CTRL+E] edit kcl" "[CTRL+K] kernels" "[CTRL+D] set bootfs" "[CTRL+S] snapshots" "" \
+    "[CTRL+I] interactive chroot" "[CTRL+R] recovery shell" "[CTRL+P] pool status" )"
 
   expects="--expect=alt-e,alt-k,alt-d,alt-s,alt-c,alt-r,alt-p,alt-w,alt-i,alt-o"
 
@@ -474,8 +466,7 @@ draw_kernel() {
   zdebug "using kernels file: ${_kernels}"
 
   header="$( header_wrap \
-    "[ENTER] boot" "[CTRL+D] set default" "EOL" \
-    "[ESC] back " "[CTRL+H] help" "[CTRL+L] view logs" )"
+    "[ENTER] boot" "[ESC] back" "" "[CTRL+D] set default" "[CTRL+H] help" "[CTRL+L] view logs" )"
 
   expects="--expect=alt-d"
 
@@ -512,9 +503,9 @@ draw_snapshots() {
   sort_key="$( get_sort_key )"
 
   header="$( header_wrap \
-    "[ENTER] duplicate" "[CTRL+X] clone/promote" "[CTRL+C] clone only" "EOL" \
-    "[CTRL+I] chroot" "[CTRL+D] show diff" "EOL" \
-    "[ESC] back" "[CTRL+H] help" "[CTRL+L] view logs" )" 
+    "[ENTER] duplicate" "[ESC] back" "[CTRL+H] help" "[CTRL+L] view logs" "" \
+    "[CTRL+X] clone and promote" "[CTRL+C] clone only" "" \
+    "[CTRL+I] interactive chroot" "[CTRL+D] show diff" )"
 
   expects="--expect=alt-x,alt-c,alt-d,alt-i,alt-o"
 
@@ -592,7 +583,7 @@ draw_pool_status() {
   # Wrap to half width to avoid the preview window
   hdr_width="$(( ( $( tput cols ) / 2 ) - 4 ))"
   header="$( wrap_width="$hdr_width" header_wrap \
-    "[ESC] back" "[CTRL+R] rewind checkpoint" "[CTRL+H] help" "[CTRL+L] view logs" )"
+    "[ESC] back" "" "[CTRL+R] rewind checkpoint" "" "[CTRL+H] help" "[CTRL+L] view logs" )"
 
   if ! selected="$( zpool list -H -o name |
       HELP_SECTION=POOL ${FUZZYSEL} \
