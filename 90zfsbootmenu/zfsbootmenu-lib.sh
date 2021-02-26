@@ -354,7 +354,7 @@ csv_cat() {
 # returns: nothing
 
 header_wrap() {
-  local hardbreak tokens tok footer nlines minwidth minheight maxcols curcols
+  local hardbreak tokens tok footer nlines allow_breaks maxcols curcols
 
   # Pick a wrap width if none was specified
   if [ -z "${wrap_width}" ]; then
@@ -384,11 +384,13 @@ header_wrap() {
     fi
   done
 
-  # Honor hard breaks only if terminal is sufficiently large
-  minheight=24
-  minwidth="$(( maxcols * field_width ))"
-
+  # Honor hard breaks only if terminal is sufficiently tall and wide
   nlines="$( tput lines 2>/dev/null )" || nlines=0
+  if [ "${nlines}" -ge 24 ] && [ "${wrap_width}" -ge "$(( maxcols * field_width ))" ]; then
+    allow_breaks=1
+  else
+    allow_breaks=0
+  fi
 
   # Processing is done line-by-line
   while [ $# -gt 0 ]; do
@@ -409,7 +411,7 @@ header_wrap() {
 
       if [ -n "${tok}" ]; then
         tokens+=( "${tok}" )
-      elif [ "${nlines}" -ge "${minheight}" ] && [ "${wrap_width}" -ge "${minwidth}"  ]; then
+      elif [ "${allow_breaks}" -eq 1 ]; then
         # Hard wrap on empty tokens only with sufficient space
         hardbreak=1
         break
