@@ -621,17 +621,20 @@ draw_diff() {
 # returns: 130 on error, 0 otherwise
 
 draw_pool_status() {
-  local selected header hdr_width
+  local selected header psize
 
-  # Wrap to half width to avoid the preview window
+  # size the preview window to leave enough room for headers on the left
+  psize="$(( $( tput cols ) - 34 ))"
+  [ "${psize}" -le 0 ] && psize=10
+
   # Override uniform field width to force once item per line
-  hdr_width="$(( ( $( tput cols ) / 2 ) - 4 ))"
-  header="$( wrap_width="$hdr_width" field_width=0 header_wrap "[ESCAPE] back" "" \
+  header="$( field_width=0 header_wrap "[ESCAPE] back" "" \
     "[CTRL+R] rewind checkpoint" "" "[CTRL+L] view logs" "" "[CTRL+H] help" )"
 
   if ! selected="$( zpool list -H -o name |
       HELP_SECTION=POOL ${FUZZYSEL} \
       --prompt "Pool > " --tac --expect=alt-r,ctrl-r,ctrl-alt-r \
+      --preview-window="right:${psize}:sharp" \
       --preview="zpool status -v {}" --header="${header}" )"; then
     return 1
   fi
