@@ -354,10 +354,25 @@ csv_cat() {
 # returns: nothing
 
 header_wrap() {
-  local hardbreak tokens tok footer nlines
+  local hardbreak tokens tok footer nlines minwidth minheight
 
   # Pick a wrap width if none was specified
-  [ -n "$wrap_width" ] || wrap_width="$(( $( tput cols ) - 4 ))"
+  if [ -z "${wrap_width}" ]; then
+    wrap_width="$(( $( tput cols 2>/dev/null ) - 4 ))"
+    [ "${wrap_width}" -gt 0 ] || wrap_width=80
+  fi
+
+  # Pick a uniform field width
+  if [ -z "${field_width}" ]; then
+    field_width=0
+    for tok in "$@"; do
+      [ "${#tok}" -gt "${field_width}" ] && field_width="${#tok}"
+    done
+  fi
+
+  # Honor hard breaks only if terminal is sufficiently large
+  minheight=24
+  minwidth="$(( 4 * field_width ))"
 
   nlines="$( tput lines 2>/dev/null )" || nlines=0
 
@@ -368,12 +383,19 @@ header_wrap() {
 
     # Process up to the first empty string, which is a hard break
     while [ $# -gt 0 ]; do
-      tok="${1// /_}"
+      # Pad fields if a uniform field width was assigned
+      if [ "${field_width}" -gt 0 ] && [ -n "$1" ]; then
+        tok="$( printf "%-${field_width}s" "$1" )"
+        tok="${tok// /_}"
+      else
+        tok="${1// /_}"
+      fi
+
       shift
 
       if [ -n "${tok}" ]; then
         tokens+=( "${tok}" )
-      elif [ "$nlines" -ge 24 ]; then
+      elif [ "${nlines}" -ge "${minheight}" ] && [ "${wrap_width}" -ge "${minwidth}"  ]; then
         # Hard wrap on empty tokens only with sufficient space
         hardbreak=1
         break
@@ -423,7 +445,7 @@ draw_be() {
 
   zdebug "using environment file: ${env}"
 
-  header="$( header_wrap "[ENTER] boot" "[ESC] refresh view" "[CTRL+H] help" "[CTRL+L] view logs" "" \
+  header="$( header_wrap " [ENTER] boot" "   [ESC] refresh view" "[CTRL+H] help" "[CTRL+L] view logs" "" \
     "[CTRL+E] edit kcl" "[CTRL+K] kernels" "[CTRL+D] set bootfs" "[CTRL+S] snapshots" "" \
     "[CTRL+I] interactive chroot" "[CTRL+R] recovery shell" "[CTRL+P] pool status" )"
 
@@ -466,7 +488,7 @@ draw_kernel() {
   zdebug "using kernels file: ${_kernels}"
 
   header="$( header_wrap \
-    "[ENTER] boot" "[ESC] back" "" "[CTRL+D] set default" "[CTRL+H] help" "[CTRL+L] view logs" )"
+    " [ENTER] boot" "   [ESC] back" "" "[CTRL+D] set default" "[CTRL+H] help" "[CTRL+L] view logs" )"
 
   expects="--expect=alt-d"
 
@@ -503,7 +525,7 @@ draw_snapshots() {
   sort_key="$( get_sort_key )"
 
   header="$( header_wrap \
-    "[ENTER] duplicate" "[ESC] back" "[CTRL+H] help" "[CTRL+L] view logs" "" \
+    " [ENTER] duplicate" "   [ESC] back" "[CTRL+H] help" "[CTRL+L] view logs" "" \
     "[CTRL+X] clone and promote" "[CTRL+C] clone only" "" \
     "[CTRL+I] interactive chroot" "[CTRL+D] show diff" )"
 
@@ -581,9 +603,10 @@ draw_pool_status() {
   local selected header hdr_width
 
   # Wrap to half width to avoid the preview window
+  # Override uniform field width to force once item per line
   hdr_width="$(( ( $( tput cols ) / 2 ) - 4 ))"
-  header="$( wrap_width="$hdr_width" header_wrap \
-    "[ESC] back" "" "[CTRL+R] rewind checkpoint" "" "[CTRL+H] help" "[CTRL+L] view logs" )"
+  header="$( wrap_width="$hdr_width" field_width=0 header_wrap "   [ESC] back" "" \
+    "[CTRL+R] rewind checkpoint" "" "[CTRL+H] help" "" "[CTRL+L] view logs" )"
 
   if ! selected="$( zpool list -H -o name |
       HELP_SECTION=POOL ${FUZZYSEL} \
